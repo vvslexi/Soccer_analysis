@@ -10,3 +10,28 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+# Libraries
+
+First Time installations
+#install.packages("devtools")
+#install.packages("remotes")
+#remotes::install_version("SDMTools", "1.1-221")
+#devtools::install_github("statsbomb/StatsBombR")
+
+library(tidyverse)
+library(dplyr)
+
+# Required packages by StatsBombR
+library(stringi)
+library(rvest)
+library(RCurl)
+library(foreach)
+library(iterators)
+library(parallel)
+library(httr)
+library(jsonlite)
+library(sp)
+
+library(StatsBombR)
+```
