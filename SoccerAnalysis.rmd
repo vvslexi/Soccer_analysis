@@ -1,0 +1,12 @@
+---
+title: "Soccer Analysis Using Statsbomb Data"
+date: "04-20-2026"
+output: 
+  html_document: 
+    theme: cerulean
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
