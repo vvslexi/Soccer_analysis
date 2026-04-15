@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 # Libraries
 
-First Time installations
+# First Time installations
 #install.packages("devtools")
 #install.packages("remotes")
 #remotes::install_version("SDMTools", "1.1-221")
@@ -35,3 +35,35 @@ library(sp)
 
 library(StatsBombR)
 ```
+
+
+```{r}
+# Load all competitions
+Comp <- FreeCompetitions()
+glimpse(Comp)
+
+# Show all competition names 
+unique(Comp$competition_name)
+```
+
+```{r}
+# Filters to competitions of a unique league
+champLeagues_Comp <- Comp %>% 
+  filter(competition_name == "Champions League")
+
+# Load matches of that league
+Matches <- FreeMatches(champLeagues_Comp)
+
+
+# Filter out events data for each match in that league - AI Generated
+champLeagues_events <- list()
+
+for (i in 1:nrow(Matches)) {
+  match_data <- get.matchFree(Matches[i,])
+  champLeagues_events[[i]] <- match_data  # Store in list
+  print(paste("Loaded match", i, "of", nrow(Matches)))
+}
+champLeagues_events <- bind_rows(champLeagues_events)
+
+```
+
