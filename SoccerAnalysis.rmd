@@ -5,8 +5,189 @@ output:
   html_document: 
     theme: cerulean
 ---
+## **Introduction**
+
+The data is sourced from StatsBomb's Open Data repository via their R package. It contains highly detailed, event level data for various soccer competitions. For this analysis, we are specifically filtering the data to look at UEFA Champions League matches.
+
+* A link to the data repository [StatsBomb Open Data on GitHub](https://github.com/statsbomb/open-data)
+
+## **Questions**
+
+* To understand tactical trends, team performance, and player behaviors within the Champions League.
+
+  * *Which players were caught in an offside position the most frequently?*
+  * *?*
+  * *?*
+  * *?*
+
+## **Key Terms for Unfiltered Data & Filtered Data**
+
+* `player.name`: Name of the primary player involved in the event
+
+* `type.name`: The primary category of the event (e.g., "Pass", "Offside", "Shot")
+
+* `pass.outcome.name`: The result of a pass attempt (e.g., "Pass Offside")
+
+* `pass.recipient.name`: The intended target of a pass (used to identify who was offside during a pass)
+
+* `offside_player`: A calculated field identifying the specific player caught offside
+
+* `offside_count`: The total number of times a specific player was caught offside
+
+## **Key Values and Calculations:**
+
+
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+```{r 1}
+#install.packages("devtools")
+#install.packages("remotes")
+#devtools::install_github("statsbomb/StatsBombR")
+
+library(tidyverse)
+library(dplyr)
+
+library(stringi)
+library(rvest)
+library(RCurl)
+library(foreach)
+library(iterators)
+library(parallel)
+library(httr)
+library(jsonlite)
+library(sp)
+
+library(StatsBombR)
+```
+
+
+```{r}
+# Load all competitions
+Comp <- FreeCompetitions()
+glimpse(Comp)
+
+# Show all competition names 
+unique(Comp$competition_name)
+```
+
+```{r}
+champLeagues_Comp <- Comp %>% 
+  filter(competition_name == "Champions League")
+
+Matches <- FreeMatches(champLeagues_Comp)
+
+
+champLeagues_events <- list()
+
+for (i in 1:nrow(Matches)) {
+  match_data <- get.matchFree(Matches[i,])
+  champLeagues_events[[i]] <- match_data  
+  print(paste("Loaded match", i, "of", nrow(Matches)))
+}
+champLeagues_events <- bind_rows(champLeagues_events)
+
+```
+## **Most offside positions in the Champions League**
+```{r 3}
+offside_players <- champLeagues_events %>%
+  filter(pass.outcome.name == "Pass Offside" | type.name == "Offside") %>%
+  mutate(offside_player = ifelse(type.name == "Pass", pass.recipient.name, player.name)) %>%
+  filter(!is.na(offside_player)) %>%
+  group_by(offside_player) %>%
+  summarise(offside_count = n(), .groups = 'drop') %>%
+  arrange(desc(offside_count))
+
+head(offside_players, 10)
+
+top_10_offsides <- head(offside_players, 10)
+
+ggplot(top_10_offsides, aes(x = reorder(offside_player, offside_count), y = offside_count)) +
+  geom_bar(stat = "identity", fill = "#0E1E5B", width = 0.7) +
+  coord_flip() +
+  labs(
+    title = "Most Offsides in the Champions League",
+    subtitle = "Players caught in an offside position",
+    x = "Player",
+    y = "Number of Offsides"
+  ) +
+  theme_minimal()
+```
+## **Average Goals per Match: Home vs. Away**
+```{r 4}
+Matches <- Matches %>%  
+  mutate(total_goals = home_score + away_score)
+
+avg_total_goals <- mean(Matches$total_goals, na.rm = T)
+avg_home_goals <- mean(Matches$home_score, na.rm = T)
+avg_away_goals <- mean(Matches$away_score, na.rm = T)
+
+print(paste("Average total goals per match:", round(avg_total_goals, 2)))
+print(paste("Average home team goals:", round(avg_home_goals, 2)))
+print(paste("Average away team goals:", round(avg_away_goals, 2)))
+
+ggplot(Matches, aes(x = home_score, y = away_score)) +
+  geom_jitter(width = 0.2, height = 0.2, alpha = 0.6, color = "blue", size = 3) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black") +
+  
+  geom_abline(intercept = 0, slope = 0.5, linetype = "dashed", color = "green", size = 1) +
+  geom_abline(intercept = 0, slope = 2, linetype = "dashed", color = "red", size = 1) +
+  
+  labs(
+    title = "Match Results: Home Goals vs. Away Goals",
+    subtitle = "Black line = Draw | Green line = Slope 0.5 | Red line = Slope 2",
+    x = "Home Team Goals",
+    y = "Away Team Goals"
+  ) +
+  
+  coord_fixed(ratio = 1) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14, face = "bold"))
+```
+
+
+### **Does Defense Win More Games?**
+
+#To determine if defense correlates with winning, we can measure the volume of defensive actions a team performs in a match (Tackles, Interceptions, Clearances, Blocks, and Pressures) and compare it to the match outcome.
+
+```{r defense-analysis, warning=FALSE, message=FALSE}
+defensive_events <- champLeagues_events %>%
+  filter(type.name %in% c("Pressure", "Tackle", "Interception", "Clearance", "Block")) %>%
+  group_by(match_id, team.name) %>%
+  summarise(defensive_actions = n(), .groups = 'drop')
+
+team_match_outcomes <- bind_rows(
+  Matches %>% select(match_id, team.name = home_team.home_team_name,
+                     goals_for = home_score, goals_against = away_score),
+  Matches %>% select(match_id, team.name = away_team.away_team_name,
+                     goals_for = away_score, goals_against = home_score)
+) %>% mutate(outcome = case_when(
+    goals_for > goals_against ~ "Win",
+    goals_for < goals_against ~ "Loss",
+    T ~ "Draw"
+  ))
+
+team_match_outcomes %>%
+  inner_join(defensive_events, by = c("match_id", "team.name")) %>%
+  group_by(outcome) %>%
+  summarise(avg_actions = mean(defensive_actions, na.rm = T), .groups = 'drop') %>%
+  mutate(outcome = factor(outcome, levels = c("Loss", "Draw", "Win"))) %>%
+  ggplot(aes(x = outcome, y = avg_actions, fill = outcome)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  geom_text(aes(label = round(avg_actions, 1)), vjust = -0.5, size = 3, fontface = "bold") +
+  scale_fill_manual(values = c("Win" = "green", "Draw" = "blue", "Loss" = "red")) +
+  labs(
+    title = "Average Defensive Actions by Match Outcome",
+    subtitle = "Tackles, Interceptions, Clearances, Blocks, and Pressures combined",
+    x = "Match Outcome", y = "Average Defensive Actions"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(size = 14, face = "bold"))
+```
+
+
+
 
