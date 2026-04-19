@@ -51,6 +51,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(dplyr)
 
+# Required packages by StatsBombR
 library(stringi)
 library(rvest)
 library(RCurl)
