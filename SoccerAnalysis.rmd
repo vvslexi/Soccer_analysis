@@ -2,41 +2,57 @@
 title: "Soccer Analysis Using Statsbomb Data"
 author: "Harvey Gonzalez, Alexi Umana, Samuel Nunez"
 date: "04-20-2026"
-output: slidy_presentation
+output: 
+  slidy_presentation:
+    theme: cerulean
 ---
 ## **Introduction**
 
-The data is sourced from StatsBomb's Open Data repository via their R package. It contains highly detailed, event level data for various soccer competitions. For this analysis, we are specifically filtering the data to look at UEFA Champions League matches.
+The data is sourced from StatsBomb's Open Data repository via their R package. It contains highly detailed, event-level data for various soccer competitions, including every pass, shot, tackle, and defensive action recorded during matches. For this analysis, we are specifically filtering the data to look at UEFA Champions League matches.
 
 * A link to the data repository [StatsBomb Open Data on GitHub](https://github.com/statsbomb/open-data)
 
+**Limitations**: StatsBomb's free tier only releases the Champions League Final from each season, rather than every match played. This means our analysis is based on a small sample of matches rather than a fuull season of games.
+
 ## **Questions**
 
-* To understand tactical trends, team performance, and player behaviors within the Champions League.
+**Main Question**: What factors influence winning in professional soccer matches? 
+
 
   * *Which players were caught in an offside position the most frequently?*
-  * *?*
-  * *Where on the field do Champion League shots mostly originate from, and how does the conversion rate chance across different zones?*
+  
+  * *Does defensive maneuvers (tackles, pressures, interceptions, etc.) correlate with winning?*
+  * *Does playing at home provide a measurable advantage?*
+  * *What is the average score per match, and how are goals distributed between home and away teams?*
+  
+  * *Where on the field do Champion League shots mostly originate from, and how does the score rate chance across different zones?*
   * *How does shot quality (xG) drop as shot distance from goal increases?*
-  * *What are the conversion rates of penalty kicks?*
+  * *What are the score rates of penalty kicks?*
 
 ## **Key Terms for Unfiltered Data & Filtered Data**
 
 * `player.name`: Name of the primary player involved in the event
 
-* `type.name`: The primary category of the event (e.g., "Pass", "Offside", "Shot")
+* `type.name`: The primary category of the event (e.g., "Pass", "Offside", "Shot", "Tackle", "Pressure")
 
-* `pass.outcome.name`: The result of a pass attempt (e.g., "Pass Offside")
+* `team.name`: The team responsible for a given event
 
-* `pass.recipient.name`: The intended target of a pass (used to identify who was offside during a pass)
+* `location`: A list with x and y coordinates (0-120 long, 0-80 wide) marking where the event occurred on the field
 
-* `offside_player`: A calculated field identifying the specific player caught offside
+* `shot.outcome.name`: The result of a shot (e.g., "Goal", "Saved", "Off T", "Post")
 
-* `offside_count`: The total number of times a specific player was caught offside
+* `shot.statsbomb_xg`: Expected goals — probability (0 to 1) that a shot becomes a goal based on location and context
+
+* `shot.body_part.name`: The body part used for a shot (e.g., "Right Foot", "Left Foot")
+
+* `shot.type.name`: Context of the shot (e.g., "Open Play", "Penalty", "Free Kick")
+
+* `home_score` / `away_score`: Final goals scored by the home and away teams
+
+* `pass.outcome.name` / `pass.recipient.name`: Used to identify offside calls during passes
+
 
 ## **Key Values and Calculations:**
-
-
 
 
 ```{r setup, include=FALSE}
@@ -96,7 +112,7 @@ champLeagues_events <- bind_rows(champLeagues_events)
 
 ## **Most offside positions in the Champions League**
 
-```{r 3}
+```{r 3, echo = FALSE}
 offside_players <- champLeagues_events %>%
   filter(pass.outcome.name == "Pass Offside" | type.name == "Offside") %>%
   mutate(offside_player = ifelse(type.name == "Pass", pass.recipient.name, player.name)) %>%
@@ -123,7 +139,7 @@ ggplot(top_10_offsides, aes(x = reorder(offside_player, offside_count), y = offs
 
 ## **Average Goals per Match: Home vs. Away**
 
-```{r 4}
+```{r 4, echo = FALSE}
 Matches <- Matches %>%  
   mutate(total_goals = home_score + away_score)
 
@@ -155,11 +171,11 @@ ggplot(Matches, aes(x = home_score, y = away_score)) +
 ```
 
 
-### **Does Defense Win More Games?**
+## **Does Defense Win More Games?**
 
 #To determine if defense correlates with winning, we can measure the volume of defensive actions a team performs in a match (Tackles, Interceptions, Clearances, Blocks, and Pressures) and compare it to the match outcome.
 
-```{r defense-analysis, warning=FALSE, message=FALSE}
+```{r defense-analysis, warning=FALSE, message=FALSE, echo = FALSE}
 defensive_events <- champLeagues_events %>%
   filter(type.name %in% c("Pressure", "Tackle", "Interception", "Clearance", "Block")) %>%
   group_by(match_id, team.name) %>%
@@ -195,9 +211,9 @@ team_match_outcomes %>%
 ```
 
 
-## Does being on a home field gives an advantage? 
+## **Does being on a home field gives an advantage?** 
 
-```{r, echo = FALSE}
+```{r}
 # Step 1: filter out 
 matches_clean <- Matches %>%
  select(match_id,
@@ -227,13 +243,11 @@ barplot(home_away_counts$count,
         col = c("#006400", "#1E88E5", "#FF8C00"),
         main = "Home vs Away Advantage",
         ylab = "Number of Matches")
-
-
 ```
 
-## Does defense win more games?
+## **Does defense win more games?**
 
-```{r, echo = FALSE}
+```{r}
 # Step 1: Measure Defensive Performance
 
 ga <- champLeagues_events %>%
@@ -243,7 +257,7 @@ ga <- champLeagues_events %>%
  arrange(ga)
 ```
 
-```{r, echo = FALSE}
+```{r}
 # Step 2: Count Team Wins
 
 wins <- matches_results %>%
@@ -257,7 +271,7 @@ wins <- matches_results %>%
  summarise(wins = n())
 ```
 
-```{r, echo = FALSE}
+```{r}
 # Step 3: link Defense and Wins
 
 df <- ga %>%
@@ -265,7 +279,7 @@ df <- ga %>%
  inner_join(wins, by = c("team" = "w"))
 ```
 
-```{r, echo = FALSE}
+```{r}
 # Step 4 : Graph
 
 df2 <- df %>%
@@ -278,9 +292,9 @@ plot(df2$ga, df2$wins,
 
 ```
 
-## Whats the average score per match ?
+## **Whats the average score per match ?**
 
-```{r, echo = FALSE}
+```{r}
 #step 1: Get total goals per match
 
 ms <- matches_clean %>%
@@ -357,10 +371,10 @@ body_part_analysis <- champLeagues_penalty_shots %>%
   summarize(
     Total = n(),
     Goals = sum(shot.outcome.name == "Goal"),
-    Conversion_Rate = round((Goals / Total) * 100, 1),
+    Score_Rate = round((Goals / Total) * 100, 1),
     .groups = 'drop'
   ) %>%
-  arrange(desc(Conversion_Rate))
+  arrange(desc(Score_Rate))
  
 print(body_part_analysis)
 
@@ -369,16 +383,16 @@ print(body_part_analysis)
 ```{r, echo = FALSE}
 
 body_part_analysis %>% ggplot(aes(x = shot.body_part.name, 
-                               y = Conversion_Rate, fill = shot.body_part.name)) +
+                               y = Score_Rate, fill = shot.body_part.name)) +
   geom_col(width = 0.5) +
   coord_flip() +
   scale_fill_manual(values = c("Right Foot" = "springgreen3", 
                                "Left Foot" = "red3")) +
   labs(
-    title = "Penalty Conversion Rate by Body Part",
+    title = "Penalty Score Rate by Body Part",
     x = "Body Part Used",
-    y = "Conversion Rate (%)",
-    fill = "Conversion %"
+    y = "Score Rate (%)",
+    fill = "Score %"
   ) +
   theme_minimal() +
   theme(
@@ -397,17 +411,16 @@ body_part_outcome <- champLeagues_penalty_shots %>%
 print(body_part_outcome)
 ```
 
-## Shots On The Goal
+## **Shots On The Goal**
 
 ```{r, echo = FALSE}
 champLeagues_shots_xy <- champLeagues_shots %>%
   filter(!is.na(location)) %>%
   mutate(
-    x = map_dbl(location, 1),            # x-coordinate (0-120 facing direction of attack)
-    y = map_dbl(location, 2),            # y-coordinate (0-80, width of field)
-    is_goal = shot.outcome.name == "Goal" # binary indicator for conversion
+    x = map_dbl(location, 1), # x-coordinate (0-120 facing direction of attack)
+    y = map_dbl(location, 2), # y-coordinate (0-80, width of field)
+    is_goal = shot.outcome.name == "Goal" 
   ) %>%
-  # Remove penalties so we're analyzing open-play + free-kick shooting patterns
   filter(shot.type.name != "Penalty")
 
 
@@ -436,7 +449,7 @@ get_lateral_zone <- Vectorize(function(y) {
     } 
 })
 
-pitch_zones <- champLeagues_shots_xy %>%
+field_zones <- champLeagues_shots_xy %>%
   filter(x >= 60) %>%  # attacking half only
   mutate(
     distance_band = get_distance_band(x),
@@ -445,12 +458,12 @@ pitch_zones <- champLeagues_shots_xy %>%
   summarise(
     total_shots     = n(),
     goals           = sum(is_goal, na.rm = TRUE),
-    conversion_rate = round(goals / total_shots * 100, 1),
+    score_rate = round(goals / total_shots * 100, 1),
     .groups = "drop"
   ) %>%
-  arrange(distance_band, desc(conversion_rate))
+  arrange(distance_band, desc(score_rate))
 
-pitch_zones
+field_zones
 ```
 
 ```{r, echo = FALSE}
@@ -473,7 +486,7 @@ ggplot()+
 ```
 
 
-## xG vs Shot Distance
+## **xG vs Shot Distance**
 
 ```{r, echo = FALSE}
 xg_distance_data <- champLeagues_shots_xy %>%
@@ -494,3 +507,22 @@ ggplot(xg_distance_data,
        y = "Expected Goals (xG)")
   
 ```
+
+## Conclusion 
+
+So, what factors influence winning in professional soccer matches?
+
+Shot location matters the most! Scoring rates increase drastically inside the box and in central zones, while xG drops steeply as distance from goal increases. 
+
+Home advantage is unclear. In our analysis, home teams win more often than away teams, but the gap is modest. However, our sample size is small and is not enough information to confidently conclude whether home-field advantage meaningfully influences winning in professional soccer.
+
+Penalties are the single highest-probability scoring opportunity, which shows how important it is to draw fouls inside the box
+
+## Resources
+
+ * [StatsBomb Documentation](https://github.com/statsbomb/open-data)
+
+ * [StatsBombR GitHub](https://github.com/statsbomb/open-data)
+
+ * [ggplot Soccer Map](https://biscuitchaserfc.substack.com/p/shot-maps-in-r-with-statsbomb-data)
+ 
