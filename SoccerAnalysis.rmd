@@ -1,9 +1,8 @@
 ---
 title: "Soccer Analysis Using Statsbomb Data"
+author: "Harvey Gonzalez, Alexi Umana, Samuel Nunez"
 date: "04-20-2026"
-output: 
-  html_document: 
-    theme: cerulean
+output: slidy_presentation
 ---
 ## **Introduction**
 
@@ -17,8 +16,9 @@ The data is sourced from StatsBomb's Open Data repository via their R package. I
 
   * *Which players were caught in an offside position the most frequently?*
   * *?*
-  * *?*
-  * *?*
+  * *Where on the field do Champion League shots mostly originate from, and how does the conversion rate chance across different zones?*
+  * *How does shot quality (xG) drop as shot distance from goal increases?*
+  * *What are the conversion rates of penalty kicks?*
 
 ## **Key Terms for Unfiltered Data & Filtered Data**
 
@@ -40,16 +40,19 @@ The data is sourced from StatsBomb's Open Data repository via their R package. I
 
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
-```{r 1}
+```{r, message=FALSE, warning=FALSE}
 #install.packages("devtools")
 #install.packages("remotes")
 #devtools::install_github("statsbomb/StatsBombR")
+#install.packages("ggsoccer")
+
 
 library(tidyverse)
 library(dplyr)
+library(ggsoccer)
 
 # Required packages by StatsBombR
 library(stringi)
@@ -66,33 +69,33 @@ library(StatsBombR)
 ```
 
 
-```{r}
-# Load all competitions
-Comp <- FreeCompetitions()
-glimpse(Comp)
+```{r,results='hide'}
+# Load all free competitions
+invisible(capture.output(
+  Comp <- FreeCompetitions()
+  ))
 
-# Show all competition names 
-unique(Comp$competition_name)
-```
-
-```{r}
 champLeagues_Comp <- Comp %>% 
   filter(competition_name == "Champions League")
 
-Matches <- FreeMatches(champLeagues_Comp)
-
+invisible(capture.output(
+  Matches <- FreeMatches(champLeagues_Comp)
+  ))
 
 champLeagues_events <- list()
 
+invisible(capture.output(
 for (i in 1:nrow(Matches)) {
   match_data <- get.matchFree(Matches[i,])
-  champLeagues_events[[i]] <- match_data  
-  print(paste("Loaded match", i, "of", nrow(Matches)))
+  champLeagues_events[[i]] <- match_data
 }
-champLeagues_events <- bind_rows(champLeagues_events)
+))
 
+champLeagues_events <- bind_rows(champLeagues_events)
 ```
+
 ## **Most offside positions in the Champions League**
+
 ```{r 3}
 offside_players <- champLeagues_events %>%
   filter(pass.outcome.name == "Pass Offside" | type.name == "Offside") %>%
@@ -117,7 +120,9 @@ ggplot(top_10_offsides, aes(x = reorder(offside_player, offside_count), y = offs
   ) +
   theme_minimal()
 ```
+
 ## **Average Goals per Match: Home vs. Away**
+
 ```{r 4}
 Matches <- Matches %>%  
   mutate(total_goals = home_score + away_score)
@@ -190,5 +195,302 @@ team_match_outcomes %>%
 ```
 
 
+## Does being on a home field gives an advantage? 
+
+```{r, echo = FALSE}
+# Step 1: filter out 
+matches_clean <- Matches %>%
+ select(match_id,
+         home_team.home_team_name,
+         away_team.away_team_name,
+         home_score,
+         away_score)
+
+# Step 2: Label who win each match
+matches_results <- matches_clean %>%
+ mutate(
+    result = case_when(
+      home_score > away_score ~ "Home Win",
+      home_score < away_score ~ "Away Win",
+      TRUE ~ "Draw"
+    )
+ )
+
+# Step 3: Count outcomes
+home_away_counts <- matches_results %>%
+ group_by(result) %>%
+ summarise(count = n())
+
+# Step 4:show results 
+barplot(home_away_counts$count,
+        names.arg = home_away_counts$result,
+        col = c("#006400", "#1E88E5", "#FF8C00"),
+        main = "Home vs Away Advantage",
+        ylab = "Number of Matches")
 
 
+```
+
+## Does defense win more games?
+
+```{r, echo = FALSE}
+# Step 1: Measure Defensive Performance
+
+ga <- champLeagues_events %>%
+ filter(type.name == "Shot", shot.outcome.name == "Goal") %>%
+ group_by(team.name) %>%
+ summarise(ga = n()) %>%
+ arrange(ga)
+```
+
+```{r, echo = FALSE}
+# Step 2: Count Team Wins
+
+wins <- matches_results %>%
+ mutate(w = case_when(
+    result == "Home Win" ~ home_team.home_team_name,
+    result == "Away Win" ~ away_team.away_team_name,
+    
+ )) %>%
+ filter(!is.na(w)) %>%
+ group_by(w) %>%
+ summarise(wins = n())
+```
+
+```{r, echo = FALSE}
+# Step 3: link Defense and Wins
+
+df <- ga %>%
+ rename(team = team.name) %>%
+ inner_join(wins, by = c("team" = "w"))
+```
+
+```{r, echo = FALSE}
+# Step 4 : Graph
+
+df2 <- df %>%
+ filter(wins < 100)
+
+plot(df2$ga, df2$wins,
+     xlab = "Goals Allowed",
+     ylab = "Wins",
+     main = "Defense vs Wins")
+
+```
+
+## Whats the average score per match ?
+
+```{r, echo = FALSE}
+#step 1: Get total goals per match
+
+ms <- matches_clean %>%
+ mutate(tg = home_score + away_score)
+```
+
+```{r}
+# Step 2: Find the average
+
+avg_g <- mean(ms$tg, na.rm = TRUE)
+avg_g
+```
+```{r, echo = FALSE}
+# Step 3: Graph it 
+hist(ms$tg,
+     xlab = "Goals per Match",
+     main = "Match Scores")
+abline(v = avg_g)
+```
+
+
+## **Penalty Shot Analysis**
+
+![](images/penalty.jpg)
+
+```{r, echo = FALSE}
+champLeagues_shots <- 
+  champLeagues_events %>% 
+  filter(type.name == "Shot") %>% 
+  select(id, match_id, competition_id, season_id, index, period, timestamp, minute, second, possession, duration, location, under_pressure, out, team.id, team.name, player.id, player.name, position.id, position.name, shot.end_location, shot.first_time, shot.aerial_won, shot.technique.id, shot.technique.name, shot.body_part.id, shot.body_part.name, shot.type.id, shot.type.name, shot.statsbomb_xg, shot.outcome.id, shot.outcome.name)
+
+champLeagues_penalty_shots <- champLeagues_shots %>% filter(shot.type.name == "Penalty")
+
+
+```
+
+## **Penalty Shot Analysis Overview**
+
+
+```{r, echo = FALSE}
+penalty_summary <- champLeagues_penalty_shots %>%
+  summarise(
+    total_penalties = n(),
+    Goals_Scored = sum(shot.outcome.name == "Goal"),
+    Off_Target = sum(shot.outcome.name == "Off T"),
+    Shots_Post = sum(shot.outcome.name == "Post"),
+    Shots_Saved = sum(shot.outcome.name == "Saved"),
+    Scoring_Rate = round((sum(shot.outcome.name == "Goal") / n()) * 100, 1)
+  )
+
+print(penalty_summary)
+```
+```{r, echo = FALSE}
+ggplot(champLeagues_penalty_shots, aes(x = shot.outcome.name, fill = shot.outcome.name)) +
+  geom_bar(width = .8, show.legend = FALSE) +
+  scale_fill_manual(values = c("Goal" = "springgreen3",
+                    "Off T" = "red",
+                    "Post" = "orange",
+                    "Saved" = "steelblue"))+
+  labs(title = "Penalty Shot Outcomes",
+       x = "Outcome",
+       y = "Count") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+## **Penalty Shot Analysis - Body Part**
+
+```{r, echo = FALSE}
+body_part_analysis <- champLeagues_penalty_shots %>%
+  filter(!is.na(shot.body_part.name)) %>%
+  group_by(shot.body_part.name) %>%
+  summarize(
+    Total = n(),
+    Goals = sum(shot.outcome.name == "Goal"),
+    Conversion_Rate = round((Goals / Total) * 100, 1),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(Conversion_Rate))
+ 
+print(body_part_analysis)
+
+```
+
+```{r, echo = FALSE}
+
+body_part_analysis %>% ggplot(aes(x = shot.body_part.name, 
+                               y = Conversion_Rate, fill = shot.body_part.name)) +
+  geom_col(width = 0.5) +
+  coord_flip() +
+  scale_fill_manual(values = c("Right Foot" = "springgreen3", 
+                               "Left Foot" = "red3")) +
+  labs(
+    title = "Penalty Conversion Rate by Body Part",
+    x = "Body Part Used",
+    y = "Conversion Rate (%)",
+    fill = "Conversion %"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 14, face = "bold")
+  )
+```
+
+```{r, echo = FALSE}
+body_part_outcome <- champLeagues_penalty_shots %>%
+  filter(!is.na(shot.body_part.name)) %>%
+  group_by(shot.body_part.name, shot.outcome.name) %>%
+  count() %>%
+  ungroup()
+ 
+print(body_part_outcome)
+```
+
+## Shots On The Goal
+
+```{r, echo = FALSE}
+champLeagues_shots_xy <- champLeagues_shots %>%
+  filter(!is.na(location)) %>%
+  mutate(
+    x = map_dbl(location, 1),            # x-coordinate (0-120 facing direction of attack)
+    y = map_dbl(location, 2),            # y-coordinate (0-80, width of field)
+    is_goal = shot.outcome.name == "Goal" # binary indicator for conversion
+  ) %>%
+  # Remove penalties so we're analyzing open-play + free-kick shooting patterns
+  filter(shot.type.name != "Penalty")
+
+
+```
+
+```{r, echo = FALSE}
+get_distance_band <- Vectorize(function(x) {
+  if (x >= 102){
+    "Inside the Box"
+  }else if (x >= 84) {
+    "Edge of the Box (18-36 yds)"
+  }else if (x >= 72) {
+    "Long Range (36-48 yds)"
+  }else {
+    "Very Long Range (48+ yds)"
+  }
+})
+
+get_lateral_zone <- Vectorize(function(y) {
+  if (y >= 30 & y <= 50) {
+    "Central"
+  }else if (y < 30){
+    "Right Side"
+  }else if (y > 50) {
+    "Left Side"
+    } 
+})
+
+pitch_zones <- champLeagues_shots_xy %>%
+  filter(x >= 60) %>%  # attacking half only
+  mutate(
+    distance_band = get_distance_band(x),
+    lateral_zone = get_lateral_zone(y)) %>%
+  group_by(distance_band, lateral_zone) %>%
+  summarise(
+    total_shots     = n(),
+    goals           = sum(is_goal, na.rm = TRUE),
+    conversion_rate = round(goals / total_shots * 100, 1),
+    .groups = "drop"
+  ) %>%
+  arrange(distance_band, desc(conversion_rate))
+
+pitch_zones
+```
+
+```{r, echo = FALSE}
+all_shots <- champLeagues_shots_xy
+shot_goals <- champLeagues_shots_xy %>% filter(is_goal == TRUE)
+
+ggplot()+
+  annotate_pitch(dimensions = pitch_statsbomb)+
+  theme_pitch()+
+  coord_flip(xlim = c(60,120),
+             ylim = c(0,80)) +
+  geom_point(data = all_shots,
+             aes(x = x, y = y),
+             color = "gray", alpha = 0.5) +
+  geom_point(data = shot_goals,
+             aes(x = x, y = y),
+             shape = 21, fill ="red") +
+ labs(title = "Champions League Shot Map",
+      subtitle = "Goals highlighted in red")
+```
+
+
+## xG vs Shot Distance
+
+```{r, echo = FALSE}
+xg_distance_data <- champLeagues_shots_xy %>%
+  filter(shot.type.name != "Penalty") %>%
+  mutate(
+    distance_to_goal = sqrt((120 - x)^2 + (40 - y)^2),
+    outcome = ifelse(is_goal == TRUE, "Goal", "Miss/Save")
+  )
+
+ggplot(xg_distance_data, 
+       aes(x = distance_to_goal, 
+           y = shot.statsbomb_xg)) +
+  geom_point(aes(color = outcome), 
+             alpha = 0.5, size = 2) +
+  geom_smooth(method = "loess", color = "steelblue") +
+  scale_color_manual(values = c("Goal" = "red", "Miss/Save" = "skyblue")) +
+  labs(x = "Distance to Goal (yards)",
+       y = "Expected Goals (xG)")
+  
+```
