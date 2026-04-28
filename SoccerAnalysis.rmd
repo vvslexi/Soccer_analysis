@@ -96,7 +96,7 @@ champLeagues_events <- bind_rows(champLeagues_events)
 
 ## **Most offside positions in the Champions League**
 
-```{r 3}
+```{r, echo = FALSE}
 offside_players <- champLeagues_events %>%
   filter(pass.outcome.name == "Pass Offside" | type.name == "Offside") %>%
   mutate(offside_player = ifelse(type.name == "Pass", pass.recipient.name, player.name)) %>%
@@ -123,28 +123,27 @@ ggplot(top_10_offsides, aes(x = reorder(offside_player, offside_count), y = offs
 
 ## **Average Goals per Match: Home vs. Away**
 
-```{r 4}
+```{r, echo=FALSE}
 Matches <- Matches %>%  
   mutate(total_goals = home_score + away_score)
 
 avg_total_goals <- mean(Matches$total_goals, na.rm = T)
-avg_home_goals <- mean(Matches$home_score, na.rm = T)
-avg_away_goals <- mean(Matches$away_score, na.rm = T)
+avg_home_goals  <- mean(Matches$home_score, na.rm = T)
+avg_away_goals  <- mean(Matches$away_score, na.rm = T)
 
 print(paste("Average total goals per match:", round(avg_total_goals, 2)))
-print(paste("Average home team goals:", round(avg_home_goals, 2)))
-print(paste("Average away team goals:", round(avg_away_goals, 2)))
+print(paste("Average home team goals:",       round(avg_home_goals, 2)))
+print(paste("Average away team goals:",       round(avg_away_goals, 2)))
 
 ggplot(Matches, aes(x = home_score, y = away_score)) +
   geom_jitter(width = 0.2, height = 0.2, alpha = 0.6, color = "blue", size = 3) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black") +
-  
-  geom_abline(intercept = 0, slope = 0.5, linetype = "dashed", color = "green", size = 1) +
-  geom_abline(intercept = 0, slope = 2, linetype = "dashed", color = "red", size = 1) +
+    geom_abline(intercept = 0, slope = 1,   linetype = "dashed", color = "black") +
+    geom_abline(intercept = 0, slope = 0.5, linetype = "dashed", color = "green", linewidth = 1) +
+    geom_abline(intercept = 0, slope = 2,   linetype = "dashed", color = "red",   linewidth = 1) +
   
   labs(
-    title = "Match Results: Home Goals vs. Away Goals",
-    subtitle = "Black line = Draw | Green line = Slope 0.5 | Red line = Slope 2",
+    title    = "Match Results: Home Goals vs. Away Goals",
+    subtitle = "Black = Draw (1:1) | Green = Home dominance (2:1) | Red = Away dominance (1:2)",
     x = "Home Team Goals",
     y = "Away Team Goals"
   ) +
