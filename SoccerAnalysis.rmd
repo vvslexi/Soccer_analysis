@@ -213,7 +213,7 @@ team_match_outcomes %>%
 
 ## **Does being on a home field gives an advantage?** 
 
-```{r}
+```{r, echo = FALSE}
 # Step 1: filter out 
 matches_clean <- Matches %>%
  select(match_id,
@@ -243,11 +243,13 @@ barplot(home_away_counts$count,
         col = c("#006400", "#1E88E5", "#FF8C00"),
         main = "Home vs Away Advantage",
         ylab = "Number of Matches")
+
+
 ```
 
 ## **Does defense win more games?**
 
-```{r}
+```{r, echo = FALSE}
 # Step 1: Measure Defensive Performance
 
 ga <- champLeagues_events %>%
@@ -257,7 +259,7 @@ ga <- champLeagues_events %>%
  arrange(ga)
 ```
 
-```{r}
+```{r, echo = FALSE}
 # Step 2: Count Team Wins
 
 wins <- matches_results %>%
@@ -271,7 +273,7 @@ wins <- matches_results %>%
  summarise(wins = n())
 ```
 
-```{r}
+```{r, echo = FALSE}
 # Step 3: link Defense and Wins
 
 df <- ga %>%
@@ -279,7 +281,7 @@ df <- ga %>%
  inner_join(wins, by = c("team" = "w"))
 ```
 
-```{r}
+```{r, echo = FALSE}
 # Step 4 : Graph
 
 df2 <- df %>%
@@ -294,7 +296,7 @@ plot(df2$ga, df2$wins,
 
 ## **Whats the average score per match ?**
 
-```{r}
+```{r, echo = FALSE}
 #step 1: Get total goals per match
 
 ms <- matches_clean %>%
@@ -517,12 +519,3 @@ Shot location matters the most! Scoring rates increase drastically inside the bo
 Home advantage is unclear. In our analysis, home teams win more often than away teams, but the gap is modest. However, our sample size is small and is not enough information to confidently conclude whether home-field advantage meaningfully influences winning in professional soccer.
 
 Penalties are the single highest-probability scoring opportunity, which shows how important it is to draw fouls inside the box
-
-## Resources
-
- * [StatsBomb Documentation](https://github.com/statsbomb/open-data)
-
- * [StatsBombR GitHub](https://github.com/statsbomb/open-data)
-
- * [ggplot Soccer Map](https://biscuitchaserfc.substack.com/p/shot-maps-in-r-with-statsbomb-data)
- 
